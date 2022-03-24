@@ -1,0 +1,44 @@
+node{
+
+    def mavenHome = tool name: 'maven3.8.5'
+    stage('1clone'){
+        git branch: 'feature', credentialsId: 'GITHUB-CREDENTIAL', url: 'https://github.com/landmark-zell/maven-web-app.git'
+    }
+    stage('2mavenbuild'){
+    sh "${mavenHome}/bin/mvn clean package"
+    //"bat mvn package"
+ }
+ stage('3codequality'){
+     sh "${mavenHome}/bin/mvn sonar:sonar"
+ }
+ stage('4uploadArtifacts'){
+     sh "${mavenHome}/bin/mvn deploy"
+}
+stage('5deploytodev'){
+deploy adapters: [tomcat9(credentialsId: 'tomcat-credentials', path: '', url: 'http://18.222.67.148:8080/')], contextPath: null, war: 'target/*war'
+}
+stage('6deploytoUAT'){
+    sshagent(['tomcat-credential-pem']) {
+     sh "scp -o StrictHostkeyChecking=no target/*war ec2-user@172.31.21.78:/opt/tomcat9/webapps/uatapp.war"
+}
+}
+   //  sh "scp -o StrictHostkeyChecking=no target/*war ec2-user@172.31.21.78:/opt/tomcat9/webapps/uatapp.war"
+
+  //  sh "scp -o StrictHostkeyChecking=no target/*war ec2-user@172.31.21.78:/opt/tomcat9/webapps/uatapp.war"
+stage('7approval'){
+  timeout(time:8, unit:'HOURS'){
+  input messages: 'please approve deployment to production'
+}
+}
+stage('8deploytoprod'){
+ sshagent(['tomcatcredential-prod']) {
+    sh "scp -o StrictHostkeyChecking=no target/*war ec2-user@172.31.21.78:/opt/tomcat9/webapps/uatapp.war"
+}   
+}
+ stage('9.EmailAlerts'){
+    emailext body: '''hi
+build status for boa application
+regards
+Noela''', recipientProviders: [developers()], subject: 'project status', to: 'dohnoela@gmail.com'
+}
+}
